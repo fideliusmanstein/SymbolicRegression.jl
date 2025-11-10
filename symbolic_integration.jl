@@ -2,8 +2,6 @@ using SymbolicRegression, SavitzkyGolay
 using DifferentialEquations, Plots, Random
 
 Random.seed!(42)
-X = randn(Float32, 5, 100)
-y = 2 * cos.(X[4, :]) + X[1, :] .^ 2 .- 2
 
 t = 0:0.1:10
 h = Float64(t.step) # Get the time step
@@ -13,6 +11,7 @@ noisy_signal = true_signal .+ 0.5 .* randn(length(t))
 
 # Apply the filter and SCALE it
 deriv_estimate_raw = savitzky_golay(noisy_signal, 11, 2, deriv=1)
+h = Float64(t.step) # Get the time step
 deriv_estimate_scaled = deriv_estimate_raw.y ./ h
 
 # Run SR on the SCALED derivative data
