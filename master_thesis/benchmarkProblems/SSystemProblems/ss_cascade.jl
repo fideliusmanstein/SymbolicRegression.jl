@@ -11,7 +11,7 @@ include("SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
 
-export ss_cascade_system, generate_ss_cascade_data, generate_ss_cascade_experiments
+export ss_cascade_system, generate_ss_cascade_data, generate_ss_cascade_experiments, get_equation_strings
 
 # System parameters
 const α = [10.0, 2.0, 3.0]
@@ -104,4 +104,23 @@ function generate_ss_cascade_experiments(; problem="ss_cascade1")
     return experiments
 end
 
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for ss_cascade problems as strings.
+
+Equations:
+    X1' = 10·X2^(-0.1)·X3^(-0.05)·X4 - 5·X1^0.5
+    X2' = 2·X1^0.5 - 1.44·X2^0.5
+    X3' = 3·X2^0.5 - 7.2·X3^0.5
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_cascade")
+        error("Problem $problem is not a ss_cascade problem")
+    end
+    
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 3, Dict(4 => "X4"))
+end
+
 end # module
+

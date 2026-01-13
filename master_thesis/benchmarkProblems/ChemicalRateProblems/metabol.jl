@@ -12,7 +12,7 @@ module MetabolModule
 
 using DifferentialEquations
 
-export metabol_system, generate_metabol_data, generate_metabol_experiments
+export metabol_system, generate_metabol_data, generate_metabol_experiments, get_equation_strings
 
 """
     metabol_system(X, inputs, t)
@@ -229,4 +229,39 @@ function generate_metabol_experiments(; problem="metabol1")
     return experiments
 end
 
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for metabol problems as strings.
+
+For metabol1, metabol2, and metabol3:
+    X3' = -v1 - v2 + v3 + v4
+    X4' = v1 - v3
+    X5' = v2 - v4
+    X6' = v5 - v6
+    X7' = -v5 + v6
+
+Where (with parameters from Arkin & Ross 1995):
+    v1 = X3·5.0 / ((X3 + 5.0)·(1 + X1/1.0))
+    v2 = X3·5.0 / ((X3 + 5.0)·(1 + X2/1.0))
+    v3 = X4·1.0 / (X4 + 5.0)
+    v4 = X5·1.0 / (X5 + 5.0)
+    v5 = X7·10.0 / ((X7 + 5.0)·(1 + X3/1.0))
+    v6 = X6·1.0 / (X6 + 5.0)
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "metabol")
+        error("Problem $problem is not a metabol problem")
+    end
+    
+    return [
+        "X3' = -X3·5.0/((X3+5.0)·(1+X1/1.0)) - X3·5.0/((X3+5.0)·(1+X2/1.0)) + X4·1.0/(X4+5.0) + X5·1.0/(X5+5.0)",
+        "X4' = X3·5.0/((X3+5.0)·(1+X1/1.0)) - X4·1.0/(X4+5.0)",
+        "X5' = X3·5.0/((X3+5.0)·(1+X2/1.0)) - X5·1.0/(X5+5.0)",
+        "X6' = X7·10.0/((X7+5.0)·(1+X3/1.0)) - X6·1.0/(X6+5.0)",
+        "X7' = -X7·10.0/((X7+5.0)·(1+X3/1.0)) + X6·1.0/(X6+5.0)"
+    ]
+end
+
 end # module
+

@@ -10,7 +10,7 @@ include("SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
 
-export ss_inhosc_system, generate_ss_inhosc_data, generate_ss_inhosc_experiments
+export ss_inhosc_system, generate_ss_inhosc_data, generate_ss_inhosc_experiments, get_equation_strings
 
 const α = [1.0, 1.0, 1.0, 1.0]
 const β = [1.0, 1.0, 1.0, 1.0]
@@ -80,6 +80,20 @@ function generate_ss_inhosc_experiments(; problem="ss_inhosc1")
     end
     
     return experiments
+end
+
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for ss_inhosc problems as strings.
+S-system approximation of inhibitory oscillator.
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_inhosc")
+        error("Problem $problem is not a ss_inhosc problem")
+    end
+    
+    return SSystemBase.format_ssystem_equations(α, β, g_mat, h_mat, 4, Dict(5 => "In", 6 => "Out"))
 end
 
 end # module

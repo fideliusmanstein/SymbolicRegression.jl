@@ -14,6 +14,23 @@ using DifferentialEquations
 export feedf_system, generate_feedf_data, generate_feedf_experiments
 
 """
+    get_equation_strings(problem)
+
+Return the ground truth equation strings for the feedf problem.
+"""
+function get_equation_strings(problem)
+    if problem == "feedf1"
+        return [
+            "X1' = k1*u1 - k2*X1*X2",
+            "X2' = k3*u1 - k4*X1*X2"
+        ]
+    else
+        return ["Unknown problem: $problem"]
+    end
+end
+export get_equation_strings
+
+"""
     feedf_system(X, inputs, t)
 
 Feed-forward pathway benchmark system with Michaelis-Menten kinetics.

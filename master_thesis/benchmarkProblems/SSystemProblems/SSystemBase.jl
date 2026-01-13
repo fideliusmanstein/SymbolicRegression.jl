@@ -18,7 +18,7 @@ module SSystemBase
 
 using DifferentialEquations
 
-export ssystem_ode, generate_ssystem_data
+export ssystem_ode, generate_ssystem_data, format_ssystem_equations
 
 """
     ssystem_ode(X, α, β, g, h, inputs, t)
@@ -138,4 +138,74 @@ function generate_ssystem_data(
     return t, X, input_values
 end
 
+"""
+    format_ssystem_equations(α, β, g, h, n_vars, input_indices=nothing)
+
+Format S-system equations as strings given parameters.
+
+S-system form: Xi'(t) = αi ∏j Xj^gij - βi ∏j Xj^hij
+
+Arguments:
+- α: Production rate constants
+- β: Degradation rate constants  
+- g: Production kinetic orders matrix
+- h: Degradation kinetic orders matrix
+- n_vars: Number of state variables
+- input_indices: Optional dict mapping input variable indices to names (e.g., Dict(4 => "X4"))
+
+Returns:
+- Vector of equation strings
+"""
+function format_ssystem_equations(α, β, g, h, n_vars, input_indices=nothing)
+    equations = String[]
+    
+    for i in 1:n_vars
+        # Production term: αi ∏j Xj^gij
+        prod_terms = String[]
+        if α[i] != 1.0
+            push!(prod_terms, string(α[i]))
+        end
+        
+        for j in 1:size(g, 2)
+            if g[i, j] != 0.0
+                var_name = (input_indices !== nothing && j in keys(input_indices)) ? input_indices[j] : "X$j"
+                if g[i, j] == 1.0
+                    push!(prod_terms, var_name)
+                elseif g[i, j] == -1.0
+                    push!(prod_terms, "$(var_name)^(-1)")
+                else
+                    push!(prod_terms, "$(var_name)^$(g[i, j])")
+                end
+            end
+        end
+        prod_str = isempty(prod_terms) ? string(α[i]) : join(prod_terms, "·")
+        
+        # Degradation term: βi ∏j Xj^hij
+        deg_terms = String[]
+        if β[i] != 1.0
+            push!(deg_terms, string(β[i]))
+        end
+        
+        for j in 1:size(h, 2)
+            if h[i, j] != 0.0
+                var_name = (input_indices !== nothing && j in keys(input_indices)) ? input_indices[j] : "X$j"
+                if h[i, j] == 1.0
+                    push!(deg_terms, var_name)
+                elseif h[i, j] == -1.0
+                    push!(deg_terms, "$(var_name)^(-1)")
+                else
+                    push!(deg_terms, "$(var_name)^$(h[i, j])")
+                end
+            end
+        end
+        deg_str = isempty(deg_terms) ? string(β[i]) : join(deg_terms, "·")
+        
+        # Combine into equation
+        push!(equations, "X$(i)' = $prod_str - $deg_str")
+    end
+    
+    return equations
+end
+
 end # module
+

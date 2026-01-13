@@ -10,7 +10,7 @@ include("SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
 
-export ss_feedf_system, generate_ss_feedf_data, generate_ss_feedf_experiments
+export ss_feedf_system, generate_ss_feedf_data, generate_ss_feedf_experiments, get_equation_strings
 
 # Approximate S-system parameters for feedf
 const α = [1.0, 1.0, 1.5, 1.0, 1.0, 1.0]
@@ -81,6 +81,20 @@ function generate_ss_feedf_experiments(; problem="ss_feedf1")
     end
     
     return experiments
+end
+
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for ss_feedf problems as strings.
+S-system approximation of feed-forward pathway.
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_feedf")
+        error("Problem $problem is not a ss_feedf problem")
+    end
+    
+    return SSystemBase.format_ssystem_equations(α[1:4], β[1:4], g_mat[1:4, :], h_mat[1:4, :], 4, Dict(5 => "X5", 6 => "X6"))
 end
 
 end # module

@@ -12,7 +12,7 @@ module CytokineModule
 include("../SSystemProblems/SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
-export cytokine_system, generate_cytokine_data, generate_cytokine_experiments
+export cytokine_system, generate_cytokine_data, generate_cytokine_experiments, get_equation_strings
 
 const α = [5.0, 10.0, 8.0, 6.0]
 const β = [10.0, 10.0, 10.0, 10.0]
@@ -45,13 +45,20 @@ function generate_cytokine_experiments(; problem="cytokine1")
     end
     return experiments
 end
+
+function get_equation_strings(problem::String)
+    if !startswith(problem, "cytokine")
+        error("Problem $problem is not a cytokine problem")
+    end
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 4, nothing)
+end
 end
 
 module SsEthanolfermModule
 include("../SSystemProblems/SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
-export ss_ethanolferm_system, generate_ss_ethanolferm_data, generate_ss_ethanolferm_experiments
+export ss_ethanolferm_system, generate_ss_ethanolferm_data, generate_ss_ethanolferm_experiments, get_equation_strings
 
 const α = [8.0, 6.0, 5.0, 4.0]
 const β = [10.0, 10.0, 10.0, 10.0]
@@ -86,13 +93,20 @@ function generate_ss_ethanolferm_experiments(; problem="ss_ethanolferm1")
     end
     return experiments
 end
+
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_ethanolferm")
+        error("Problem $problem is not a ss_ethanolferm problem")
+    end
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 4, nothing)
+end
 end
 
 module SsSosrepairModule
 include("../SSystemProblems/SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
-export ss_sosrepair_system, generate_ss_sosrepair_data, generate_ss_sosrepair_experiments
+export ss_sosrepair_system, generate_ss_sosrepair_data, generate_ss_sosrepair_experiments, get_equation_strings
 
 const α = [7.0, 8.0, 6.0, 5.0, 9.0, 4.0]
 const β = fill(10.0, 6)
@@ -123,13 +137,20 @@ function generate_ss_sosrepair_experiments(; problem="ss_sosrepair1")
     push!(experiments, Dict(:experiment => 1, :t => t, :X => X, :inputs => Dict(), :X0 => X0))
     return experiments
 end
+
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_sosrepair")
+        error("Problem $problem is not a ss_sosrepair problem")
+    end
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 6, nothing)
+end
 end
 
 module SsCadBAModule
 include("../SSystemProblems/SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
-export ss_cadBA_system, generate_ss_cadBA_data, generate_ss_cadBA_experiments
+export ss_cadBA_system, generate_ss_cadBA_data, generate_ss_cadBA_experiments, get_equation_strings
 
 const α = [6.0, 7.0, 5.0, 8.0]
 const β = fill(10.0, 4)
@@ -160,13 +181,20 @@ function generate_ss_cadBA_experiments(; problem="ss_cadBA1")
     push!(experiments, Dict(:experiment => 1, :t => t, :X => X, :inputs => Dict(), :X0 => X0))
     return experiments
 end
+
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_cadBA")
+        error("Problem $problem is not a ss_cadBA problem")
+    end
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 4, nothing)
+end
 end
 
 module SsClockModule
 include("../SSystemProblems/SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
-export ss_clock_system, generate_ss_clock_data, generate_ss_clock_experiments
+export ss_clock_system, generate_ss_clock_data, generate_ss_clock_experiments, get_equation_strings
 
 const α = [5.0, 6.0, 7.0, 6.0, 5.0, 7.0, 6.0]
 const β = fill(10.0, 7)
@@ -196,4 +224,12 @@ function generate_ss_clock_experiments(; problem="ss_clock1")
     push!(experiments, Dict(:experiment => 1, :t => t, :X => X, :inputs => Dict(), :X0 => X0))
     return experiments
 end
+
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_clock")
+        error("Problem $problem is not a ss_clock problem")
+    end
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 7, nothing)
 end
+end
+

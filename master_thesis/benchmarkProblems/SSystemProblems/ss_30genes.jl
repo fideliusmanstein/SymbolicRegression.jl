@@ -11,7 +11,7 @@ include("SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
 
-export ss_30genes_system, generate_ss_30genes_data, generate_ss_30genes_experiments
+export ss_30genes_system, generate_ss_30genes_data, generate_ss_30genes_experiments, get_equation_strings, get_equation_strings
 
 function get_parameters()
     n = 30
@@ -114,4 +114,20 @@ function generate_ss_30genes_experiments(; problem="ss_30genes1")
     return experiments
 end
 
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for ss_30genes problems as strings.
+Uses S-system format with extended 5-gene pattern.
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_30genes")
+        error("Problem $problem is not a ss_30genes problem")
+    end
+    
+    α, β, g, h = get_parameters()
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 30, nothing)
+end
+
 end # module
+

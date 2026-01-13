@@ -14,6 +14,33 @@ using DifferentialEquations
 export bifeedb_system, generate_bifeedb_data, generate_bifeedb_experiments
 
 """
+    get_equation_strings(problem)
+
+Return the ground truth equation strings for the bifeedb problem.
+"""
+function get_equation_strings(problem)
+    if problem == "bifeedb1"
+        return [
+            "X1' = 1.0/(X3+0.1) - 1.0*X1^2",
+            "X2' = 1.0*X1^2 - 1.0*X2/(X2+0.1)",
+            "X3' = 1.0*X2/(X2+0.1) - 1.0*X3/(X3+0.1)",
+            "X4' = 1.0*X3/(X3+0.1) - 1.0*X4/(X4+0.1)"
+        ]
+    elseif problem == "bifeedb2"
+        return [
+            "X1' = 1.0/(X3+0.1) - 1.0*X1^2",
+            "X2' = 1.0*X1^2 - 1.0*X2/(X2+0.1)",
+            "X3' = 1.0*X2/(X2+0.1) - 1.0*X3/(X3+0.1)",
+            "X4' = 1.0*X3/(X3+0.1) - 1.0*X4/(X4+0.1)",
+            "X5' = 1.0*X4/(X4+0.1) - 1.0*X5/(X5+0.1)"
+        ]
+    else
+        return ["Unknown problem: $problem"]
+    end
+end
+export get_equation_strings
+
+"""
     bifeedb_system(X, inputs, t; n_states=4)
 
 Bi-molecular feedback benchmark system.

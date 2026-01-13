@@ -11,7 +11,7 @@ include("SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
 
-export ss_5genes_system, generate_ss_5genes_data, generate_ss_5genes_experiments
+export ss_5genes_system, generate_ss_5genes_data, generate_ss_5genes_experiments, get_equation_strings
 
 # System parameters (5 variables)
 const α = [5.0, 10.0, 10.0, 8.0, 10.0]
@@ -106,4 +106,25 @@ function generate_ss_5genes_experiments(; problem="ss_5genes1")
     return experiments
 end
 
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for ss_5genes problems as strings.
+
+Equations:
+    X1' = 5·X3·X5^(-1) - 10·X1^2
+    X2' = 10·X1^2 - 10·X2^2
+    X3' = 10·X2^(-1) - 10·X2^(-1)·X3^2
+    X4' = 8·X3^2·X5^(-1) - 10·X4^2
+    X5' = 10·X4^2 - 10·X5^2
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_5genes")
+        error("Problem $problem is not a ss_5genes problem")
+    end
+    
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 5, nothing)
+end
+
 end # module
+

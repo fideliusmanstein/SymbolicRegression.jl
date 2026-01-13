@@ -12,7 +12,7 @@ module OscModule
 
 using DifferentialEquations
 
-export osc_system, generate_osc_data, generate_osc_experiments
+export osc_system, generate_osc_data, generate_osc_experiments, get_equation_strings
 
 """
     osc_system(X, p, t)
@@ -132,4 +132,29 @@ function generate_osc_experiments(; problem="osc1")
     return experiments
 end
 
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for oscillator problems as strings.
+
+For both osc1 and osc2:
+    X1' = k1·X2
+    X2' = -k2·X1 + k3·X2 - k4·X2·X3
+    X3' = k5·X1² - k6·X3
+
+Parameters: k = [0.9, 0.9, 1.0, 1.0, 0.6, 0.6]
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "osc")
+        error("Problem $problem is not an osc problem")
+    end
+    
+    return [
+        "X1' = 0.9·X2",
+        "X2' = -0.9·X1 + 1.0·X2 - 1.0·X2·X3",
+        "X3' = 0.6·X1² - 0.6·X3"
+    ]
+end
+
 end # module
+

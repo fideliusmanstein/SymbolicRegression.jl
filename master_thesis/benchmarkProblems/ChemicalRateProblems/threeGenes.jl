@@ -12,7 +12,7 @@ module ThreeGenesModule
 
 using DifferentialEquations
 
-export threegenes_system, generate_threegenes_data, generate_threegenes_experiments
+export threegenes_system, generate_threegenes_data, generate_threegenes_experiments, get_equation_strings
 
 """
     threegenes_system(X, inputs, t; N=3)
@@ -240,4 +240,44 @@ function generate_threegenes_experiments(; problem="threeGenes1")
     return experiments
 end
 
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for 3genes problems as strings.
+
+For both threeGenes1 and threeGenes2 (N=3):
+States: G1, G2, G3, E1, E2, E3, M1, M2
+Inputs: S (=M0), P (=M3)
+
+Gene equations:
+    Gi' = VG / (1+(P/KI)^n+(KA/Mi-1)^m) - kG·Gi
+
+Enzyme equations:
+    Ei' = VE·Gi / (KE+Gi) - kE·Ei
+
+Metabolite equations:
+    Mi' = kM1·Ei·(kM2)^(-1)·(Mi-1 - Mi) / (1+Mi-1/kM2+Mi/kM3) - 
+          kM1·E(i+1)·(kM2)^(-1)·(Mi - M(i+1)) / (1+Mi/kM2+M(i+1)/kM3)
+
+Parameters: VG=KI=KA=kG=KE=kM1=kM2=kM3=1.0, n=m=2, VE=kE=0.1
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "threeGenes")
+        error("Problem $problem is not a threeGenes problem")
+    end
+    
+    # For N=3 with all parameters = 1.0 except VE=kE=0.1, n=m=2
+    return [
+        "G1' = 1.0 / (1+(P/1.0)^2+(1.0/S)^2) - 1.0·G1",
+        "G2' = 1.0 / (1+(P/1.0)^2+(1.0/M1)^2) - 1.0·G2",
+        "G3' = 1.0 / (1+(P/1.0)^2+(1.0/M2)^2) - 1.0·G3",
+        "E1' = 0.1·G1 / (1.0+G1) - 0.1·E1",
+        "E2' = 0.1·G2 / (1.0+G2) - 0.1·E2",
+        "E3' = 0.1·G3 / (1.0+G3) - 0.1·E3",
+        "M1' = 1.0·E1·(S-M1) / (1+S/1.0+M1/1.0) - 1.0·E2·(M1-M2) / (1+M1/1.0+M2/1.0)",
+        "M2' = 1.0·E2·(M1-M2) / (1+M1/1.0+M2/1.0) - 1.0·E3·(M2-P) / (1+M2/1.0+P/1.0)"
+    ]
+end
+
 end # module
+

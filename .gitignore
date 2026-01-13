@@ -29,3 +29,6 @@ private
 
 # Generated examples:
 docs/src/examples/
+
+# Benchmark results and logs
+master_thesis/results/

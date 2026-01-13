@@ -12,7 +12,7 @@ module SimpleLinModule
 
 using DifferentialEquations
 
-export simplelin_system, generate_simplelin_data
+export simplelin_system, generate_simplelin_data, get_equation_strings
 
 """
     simplelin_system(X, inputs, t)
@@ -213,4 +213,29 @@ function generate_simplelin_experiments(; noise_std=0.1, n_points=13)
     return experiments
 end
 
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for simpleLin problems as strings.
+
+For both simpleLin1 and simpleLin2:
+    X3' = -k1·X3 + k2·X1·X4
+    X4' = k1·X3 - k2·X1·X4 + k3·X5 - k4·X2·X4
+    X5' = -k3·X5 + k4·X2·X4
+
+Parameters: k1 = k2 = k3 = k4 = 1.0
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "simpleLin")
+        error("Problem $problem is not a simpleLin problem")
+    end
+    
+    return [
+        "X3' = -1.0·X3 + 1.0·X1·X4",
+        "X4' = 1.0·X3 - 1.0·X1·X4 + 1.0·X5 - 1.0·X2·X4",
+        "X5' = -1.0·X5 + 1.0·X2·X4"
+    ]
+end
+
 end # module
+

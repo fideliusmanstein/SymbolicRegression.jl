@@ -10,7 +10,7 @@ include("SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
 
-export ss_bifeedb_system, generate_ss_bifeedb_data, generate_ss_bifeedb_experiments
+export ss_bifeedb_system, generate_ss_bifeedb_data, generate_ss_bifeedb_experiments, get_equation_strings
 
 const α = [1.0, 1.0, 1.0, 1.0, 1.0]
 const β = [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -76,6 +76,20 @@ function generate_ss_bifeedb_experiments(; problem="ss_bifeedb1")
     end
     
     return experiments
+end
+
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for ss_bifeedb problems as strings.
+S-system approximation of bi-molecular feedback.
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_bifeedb")
+        error("Problem $problem is not a ss_bifeedb problem")
+    end
+    
+    return SSystemBase.format_ssystem_equations(α, β, g_mat, h_mat, 5, nothing)
 end
 
 end # module

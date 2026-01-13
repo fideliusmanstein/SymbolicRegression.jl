@@ -13,6 +13,70 @@ using .BenchmarkSystems
 using SymbolicRegression
 using Statistics
 using Printf
+using Dates
+
+"""
+    get_ground_truth_equations(problem_name)
+
+Get ground truth equation descriptions for benchmark problems.
+Retrieves equations directly from the benchmark module functions.
+"""
+function get_ground_truth_equations(problem_name)
+    # Map problem prefixes to their modules
+    # Chemical Rate Problems
+    if startswith(problem_name, "simpleLin")
+        return BenchmarkSystems.SimpleLinModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "simpleFb")
+        return BenchmarkSystems.SimpleFbModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "osc")
+        return BenchmarkSystems.OscModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "metabol")
+        return BenchmarkSystems.MetabolModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "threeGenes")
+        return BenchmarkSystems.ThreeGenesModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "feedf")
+        return BenchmarkSystems.FeedfModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "cytokine")
+        return BenchmarkSystems.InhoscModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "bifeedb")
+        return BenchmarkSystems.BifeedbModule.get_equation_strings(problem_name)
+    # S-System Problems
+    elseif startswith(problem_name, "ss_cascade")
+        return BenchmarkSystems.SsCascadeModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_branch")
+        return BenchmarkSystems.SsBranchModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_5genes")
+        return BenchmarkSystems.Ss5genesModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_15genes")
+        return BenchmarkSystems.Ss15genesModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_30genes")
+        return BenchmarkSystems.Ss30genesModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_feedf")
+        return BenchmarkSystems.SsFeedfModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_inhosc")
+        return BenchmarkSystems.SsInhoscModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_bifeedb")
+        return BenchmarkSystems.SsBifeedbModule.get_equation_strings(problem_name)
+    # GMA Problems
+    elseif startswith(problem_name, "gma_feedf")
+        return BenchmarkSystems.GmaFeedfModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "gma_inhosc")
+        return BenchmarkSystems.GmaInhoscModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "gma_bifeedb")
+        return BenchmarkSystems.GmaBifeedbModule.get_equation_strings(problem_name)
+    # Real Biological Problems
+    elseif startswith(problem_name, "ss_ethanolferm")
+        return BenchmarkSystems.SsEthanolfermModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_sosrepair")
+        return BenchmarkSystems.SsSosrepairModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_cadBA")
+        return BenchmarkSystems.SsCadBAModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "ss_clock")
+        return BenchmarkSystems.SsClockModule.get_equation_strings(problem_name)
+    else
+        return ["Ground truth equations not yet implemented for: $problem_name"]
+    end
+end
 
 """
     evaluate_tree_on_data(tree, X_features, sr_options)
@@ -112,24 +176,19 @@ function compute_symbolic_accuracy(discovered_tree, true_derivatives, X_features
 end
 
 """
-    benchmark_single_problem(problem_name; ode_options=nothing, 
-                            r2_threshold=0.95, max_error_threshold=0.1)
+    benchmark_single_problem(problem_name; ode_options=nothing)
 
 Benchmark ODE discovery on a single problem.
 
 # Arguments
-- `problem_name`: Name of the benchmark problem
+- `problem_name`: Name of the problem from BenchmarkSystems
 - `ode_options`: ODERegressionOptions (if nothing, uses default fast settings)
-- `r2_threshold`: R² threshold for equation equivalence
-- `max_error_threshold`: Maximum relative error threshold
 
 # Returns
-- Dictionary with benchmark results
+- Dictionary with benchmark results (success based on integration_loss < 1.0)
 """
 function benchmark_single_problem(problem_name; 
-                                 ode_options=nothing,
-                                 r2_threshold=0.95,
-                                 max_error_threshold=0.1)
+                                 ode_options=nothing)
     
     println("\n" * "="^80)
     println("Benchmarking: $problem_name")
@@ -159,36 +218,28 @@ function benchmark_single_problem(problem_name;
         
         discovery_time = time() - start_time
         
-        # Extract information from result
+        # Extract basic info from first experiment
         exp = experiments[1]
         n_states = size(exp[:X], 2)
         
-        # Create SymbolicRegression options for displaying equations
+        # Success based on integration loss (no ground truth comparison)
+        success = result.integration_loss < 1.0  # Threshold for reasonable discovery
+        
+        # Convert discovered trees to equation strings
         sr_options = SymbolicRegression.Options(
             binary_operators=ode_options.binary_operators,
             unary_operators=ode_options.unary_operators
         )
+        discovered_equations = [string_tree(tree, sr_options) for tree in result.best_trees]
         
-        # Display discovered equations
-        state_results = []
-        for i in 1:n_states
-            equation_str = string_tree(result.best_trees[i], sr_options)
-            println("\nState $i:")
-            println("  Discovered: ", equation_str)
-            
-            push!(state_results, Dict(
-                "equation" => equation_str,
-                "complexity" => compute_complexity(result.best_trees[i], sr_options)
-            ))
-        end
-        
-        # Consider it successful if discovery completed without error
-        success = true
+        # Get ground truth equations
+        ground_truth_equations = get_ground_truth_equations(problem_name)
         
         println("\n" * "-"^80)
-        println("Overall Result: ✓ SUCCESS")
+        println("Overall Result: ", success ? "✓ SUCCESS" : "✗ FAILED")
         println("Discovery time: ", @sprintf("%.2f", discovery_time), " seconds")
         println("Integration loss: ", @sprintf("%.6e", result.integration_loss))
+        println("Number of states: ", n_states)
         
         return Dict(
             "problem_name" => problem_name,
@@ -196,7 +247,8 @@ function benchmark_single_problem(problem_name;
             "discovery_time" => discovery_time,
             "integration_loss" => result.integration_loss,
             "n_states" => n_states,
-            "state_results" => state_results,
+            "discovered_equations" => discovered_equations,
+            "ground_truth_equations" => ground_truth_equations,
             "error" => nothing
         )
         
@@ -212,8 +264,6 @@ function benchmark_single_problem(problem_name;
             "discovery_time" => discovery_time,
             "integration_loss" => Inf,
             "n_states" => 0,
-            "state_results" => [],
-            "all_equivalent" => false,
             "error" => string(e)
         )
     end
@@ -222,8 +272,6 @@ end
 """
     benchmark_all_problems(; ode_options=nothing, 
                           problem_filter=nothing,
-                          r2_threshold=0.95,
-                          max_error_threshold=0.1,
                           save_results=true)
 
 Benchmark ODE discovery on all (or filtered) benchmark problems.
@@ -231,18 +279,14 @@ Benchmark ODE discovery on all (or filtered) benchmark problems.
 # Arguments
 - `ode_options`: ODERegressionOptions (if nothing, uses default fast settings)
 - `problem_filter`: Function to filter problems (e.g., name -> startswith(name, "ss_"))
-- `r2_threshold`: R² threshold for equation equivalence
-- `max_error_threshold`: Maximum relative error threshold
 - `save_results`: Save results to file
 
 # Returns
-- Vector of result dictionaries
+- Vector of result dictionaries (success based on integration_loss < 1.0)
 """
 function benchmark_all_problems(;
                                ode_options=nothing,
                                problem_filter=nothing,
-                               r2_threshold=0.95,
-                               max_error_threshold=0.1,
                                save_results=true)
     
     # Get all problems
@@ -258,8 +302,7 @@ function benchmark_all_problems(;
     println("BENCHMARK: ODE Discovery System")
     println("="^80)
     println("Total problems to test: ", length(problem_names))
-    println("R² threshold: ", r2_threshold)
-    println("Max error threshold: ", max_error_threshold)
+    println("Success criterion: Integration loss < 1.0")
     if ode_options !== nothing
         println("Derivative iterations: ", ode_options.niterations_derivative)
         println("Integration iterations: ", ode_options.niterations_integration)
@@ -275,9 +318,7 @@ function benchmark_all_problems(;
         
         result = benchmark_single_problem(
             problem_name;
-            ode_options=ode_options,
-            r2_threshold=r2_threshold,
-            max_error_threshold=max_error_threshold
+            ode_options=ode_options
         )
         
         push!(all_results, result)
@@ -338,14 +379,20 @@ function benchmark_all_problems(;
                 
                 if result["error"] !== nothing
                     println(io, "Error: ", result["error"])
-                end
-                
-                for (i, state_result) in enumerate(result["state_results"])
-                    println(io, "  State $i:")
-                    println(io, "    Equation: ", state_result["equation"])
-                    println(io, "    R²: ", @sprintf("%.6f", state_result["r2"]))
-                    println(io, "    Mean rel error: ", @sprintf("%.6f", state_result["mean_relative_error"]))
-                    println(io, "    Equivalent: ", state_result["is_equivalent"])
+                else
+                    println(io, "States: ", result["n_states"])
+                    
+                    # Print ground truth equations
+                    println(io, "\nGround Truth Equations:")
+                    for (i, eq) in enumerate(get(result, "ground_truth_equations", []))
+                        println(io, "  ", eq)
+                    end
+                    
+                    # Print discovered equations
+                    println(io, "\nDiscovered Equations:")
+                    for (i, eq) in enumerate(get(result, "discovered_equations", []))
+                        println(io, "  X", i, "' = ", eq)
+                    end
                 end
                 
                 println(io, "-"^80)
@@ -362,22 +409,34 @@ end
     quick_benchmark(n_problems=5)
 
 Quick benchmark on a small subset of problems for testing.
+Runs with the same settings as the full benchmark command:
+- 10 derivative iterations
+- 5 integration iterations
+- Complexity limits: 12 for derivatives, 10 for integration
+- Finite difference method
+- Saves results to file
 """
 function quick_benchmark(n_problems=5)
     all_problems = BenchmarkSystems.list_problems()
     problem_names = sort(collect(keys(all_problems)))
     selected = problem_names[1:min(n_problems, length(problem_names))]
     
-    benchmark_all_problems(
+    results = benchmark_all_problems(
         problem_filter = name -> name in selected,
         ode_options = ODERegressionOptions(
-            niterations_derivative=5,
-            niterations_integration=3,
-            complexity_derivative=10,
+            niterations_derivative=10,
+            niterations_integration=5,
+            complexity_derivative=12,
+            complexity_integration=10,
+            differentiation_method=:finite_difference,
             verbose=false
         ),
-        save_results=false
+        save_results=true
     )
+    
+    println("\n✓ Quick benchmark complete! Tested $(length(results)) problems.")
+    
+    return results
 end
 
 # Export functions

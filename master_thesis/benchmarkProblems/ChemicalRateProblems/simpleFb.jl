@@ -12,7 +12,7 @@ module SimpleFbModule
 
 using DifferentialEquations
 
-export simplefb_system, generate_simplefb_data, generate_simplefb_experiments
+export simplefb_system, generate_simplefb_data, generate_simplefb_experiments, get_equation_strings
 
 """
     simplefb_system(X, p, t)
@@ -160,4 +160,35 @@ function generate_simplefb_experiments(; problem="simpleFb1")
     return experiments
 end
 
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for simpleFb problems as strings.
+
+For both simpleFb1 and simpleFb2:
+    X1' = k1·h⁻(X3,k2) - k3·X1
+    X2' = k4·X1 - k5·X2
+    X3' = k6·X2 - k7·X3
+
+Where h⁻(Xi,kj) = kj/(Xi+kj) is a Hill function.
+Parameters: k = [0.9, 0.9, 1.0, 1.0, 0.6, 0.6, 0.8]
+
+Expanded form:
+    X1' = 0.9·(0.9/(X3+0.9)) - 1.0·X1
+    X2' = 1.0·X1 - 0.6·X2
+    X3' = 0.6·X2 - 0.8·X3
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "simpleFb")
+        error("Problem $problem is not a simpleFb problem")
+    end
+    
+    return [
+        "X1' = 0.9·(0.9/(X3+0.9)) - 1.0·X1",
+        "X2' = 1.0·X1 - 0.6·X2",
+        "X3' = 0.6·X2 - 0.8·X3"
+    ]
+end
+
 end # module
+

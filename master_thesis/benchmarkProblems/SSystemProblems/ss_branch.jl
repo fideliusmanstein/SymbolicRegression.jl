@@ -11,7 +11,7 @@ include("SSystemBase.jl")
 using .SSystemBase
 using DifferentialEquations
 
-export ss_branch_system, generate_ss_branch_data, generate_ss_branch_experiments
+export ss_branch_system, generate_ss_branch_data, generate_ss_branch_experiments, get_equation_strings
 
 # System parameters (4 variables)
 const α = [12.0, 8.0, 3.0, 2.0]
@@ -99,6 +99,25 @@ function generate_ss_branch_experiments(; problem="ss_branch1")
     end
     
     return experiments
+end
+
+"""
+    get_equation_strings(problem::String)
+
+Return the ground truth equations for ss_branch problems as strings.
+
+Equations:
+    X1' = 12·X3^(-0.8) - 10·X1^0.5
+    X2' = 8·X1^0.5 - 3·X2^0.75
+    X3' = 3·X2^0.75 - 5·X3^0.5·X4^0.2
+    X4' = 2·X1^0.5 - 6·X4^0.8
+"""
+function get_equation_strings(problem::String)
+    if !startswith(problem, "ss_branch")
+        error("Problem $problem is not a ss_branch problem")
+    end
+    
+    return SSystemBase.format_ssystem_equations(α, β, g, h, 4, nothing)
 end
 
 end # module
