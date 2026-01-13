@@ -19,14 +19,13 @@ export feedf_system, generate_feedf_data, generate_feedf_experiments
 Return the ground truth equation strings for the feedf problem.
 """
 function get_equation_strings(problem)
-    if problem == "feedf1"
-        return [
-            "X1' = k1*u1 - k2*X1*X2",
-            "X2' = k3*u1 - k4*X1*X2"
-        ]
-    else
-        return ["Unknown problem: $problem"]
-    end
+    # All feedf problems use the same 4-state system
+    return [
+        "X1' = In1 - k1·X1/(X1+k2)",
+        "X2' = In2 - k3·X2/(X2+k4)",
+        "X3' = k5·X1/(X1+k6) + k7·X2/(X2+k8) - k9·X3/(X3+k10)",
+        "X4' = k11·X3/(X3+k12) - k13·X4/(X4+k14)"
+    ]
 end
 export get_equation_strings
 

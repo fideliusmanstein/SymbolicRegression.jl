@@ -19,14 +19,18 @@ export inhosc_system, generate_inhosc_data, generate_inhosc_experiments
 Return the ground truth equation strings for the inhosc problem.
 """
 function get_equation_strings(problem)
-    # cytokine1 and cytokine2 use the same 5-state system with different noise levels
-    if problem in ["cytokine1", "cytokine2"]
+    # inhosc1 is 2-state, inhosc2 is 4-state
+    if problem == "inhosc1"
         return [
-            "X1' = -0.27*X1",
-            "X2' = 0.27*X1 - 0.58*X2",
-            "X3' = 0.58*X2 - 0.8*X3",
-            "X4' = 0.8*X3 - 1.4*X4",
-            "X5' = 1.4*X4 - 1.8*X5"
+            "X1' = In - k1/(X2+k2)",
+            "X2' = k3/(X1+k4) - Out"
+        ]
+    elseif problem == "inhosc2"
+        return [
+            "X1' = In - k1/(X4+k2)",
+            "X2' = k3/(X1+k4) - k5/(X3+k6)",
+            "X3' = k7/(X2+k8) - k9/(X4+k10)",
+            "X4' = k11/(X3+k12) - Out"
         ]
     else
         return ["Unknown problem: $problem"]

@@ -8,6 +8,8 @@ GMA (Generalized Mass Action) uses similar structure to S-systems.
 module GmaFeedfModule
 include("GMABase.jl")
 using .GMABase
+include("../SSystemProblems/SSystemBase.jl")
+using .SSystemBase
 using DifferentialEquations
 export gma_feedf_system, generate_gma_feedf_data, generate_gma_feedf_experiments, get_equation_strings
 
@@ -56,8 +58,6 @@ function get_equation_strings(problem::String)
     if !startswith(problem, "gma_feedf")
         error("Problem $problem is not a gma_feedf problem")
     end
-    include("../SSystemProblems/SSystemBase.jl")
-    using .SSystemBase
     return SSystemBase.format_ssystem_equations(α[1:4], β[1:4], g_mat[1:4, :], h_mat[1:4, :], 4, Dict(5 => "X5", 6 => "X6"))
 end
 end
@@ -65,6 +65,8 @@ end
 module GmaInhoscModule
 include("GMABase.jl")
 using .GMABase
+include("../SSystemProblems/SSystemBase.jl")
+using .SSystemBase
 using DifferentialEquations
 export gma_inhosc_system, generate_gma_inhosc_data, generate_gma_inhosc_experiments, get_equation_strings, get_equation_strings
 
@@ -107,8 +109,6 @@ function get_equation_strings(problem::String)
     if !startswith(problem, "gma_inhosc")
         error("Problem $problem is not a gma_inhosc problem")
     end
-    include("../SSystemProblems/SSystemBase.jl")
-    using .SSystemBase
     return SSystemBase.format_ssystem_equations(α, β, g_mat, h_mat, 4, Dict(5 => "In", 6 => "Out"))
 end
 end
@@ -116,6 +116,8 @@ end
 module GmaBifeedbModule
 include("GMABase.jl")
 using .GMABase
+include("../SSystemProblems/SSystemBase.jl")
+using .SSystemBase
 using DifferentialEquations
 export gma_bifeedb_system, generate_gma_bifeedb_data, generate_gma_bifeedb_experiments, get_equation_strings, get_equation_strings
 
@@ -160,8 +162,6 @@ function get_equation_strings(problem::String)
     if !startswith(problem, "gma_bifeedb")
         error("Problem $problem is not a gma_bifeedb problem")
     end
-    include("../SSystemProblems/SSystemBase.jl")
-    using .SSystemBase
     return SSystemBase.format_ssystem_equations(α, β, g_mat, h_mat, 5, nothing)
 end
 end

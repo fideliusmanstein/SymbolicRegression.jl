@@ -23,24 +23,17 @@ Retrieves equations directly from the benchmark module functions.
 """
 function get_ground_truth_equations(problem_name)
     # Map problem prefixes to their modules
-    # Chemical Rate Problems
-    if startswith(problem_name, "simpleLin")
-        return BenchmarkSystems.SimpleLinModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "simpleFb")
-        return BenchmarkSystems.SimpleFbModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "osc")
-        return BenchmarkSystems.OscModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "metabol")
-        return BenchmarkSystems.MetabolModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "threeGenes")
-        return BenchmarkSystems.ThreeGenesModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "feedf")
-        return BenchmarkSystems.FeedfModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "cytokine")
-        return BenchmarkSystems.InhoscModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "bifeedb")
-        return BenchmarkSystems.BifeedbModule.get_equation_strings(problem_name)
-    # S-System Problems
+    # IMPORTANT: Check more specific prefixes first to avoid conflicts
+    # (e.g., "ss_feedf" before "feedf", "gma_inhosc" before "inhosc")
+    
+    # GMA Problems (check first - most specific with gma_ prefix)
+    if startswith(problem_name, "gma_feedf")
+        return BenchmarkSystems.GmaFeedfModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "gma_inhosc")
+        return BenchmarkSystems.GmaInhoscModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "gma_bifeedb")
+        return BenchmarkSystems.GmaBifeedbModule.get_equation_strings(problem_name)
+    # S-System Problems (check second - specific with ss_ prefix)
     elseif startswith(problem_name, "ss_cascade")
         return BenchmarkSystems.SsCascadeModule.get_equation_strings(problem_name)
     elseif startswith(problem_name, "ss_branch")
@@ -57,14 +50,6 @@ function get_ground_truth_equations(problem_name)
         return BenchmarkSystems.SsInhoscModule.get_equation_strings(problem_name)
     elseif startswith(problem_name, "ss_bifeedb")
         return BenchmarkSystems.SsBifeedbModule.get_equation_strings(problem_name)
-    # GMA Problems
-    elseif startswith(problem_name, "gma_feedf")
-        return BenchmarkSystems.GmaFeedfModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "gma_inhosc")
-        return BenchmarkSystems.GmaInhoscModule.get_equation_strings(problem_name)
-    elseif startswith(problem_name, "gma_bifeedb")
-        return BenchmarkSystems.GmaBifeedbModule.get_equation_strings(problem_name)
-    # Real Biological Problems
     elseif startswith(problem_name, "ss_ethanolferm")
         return BenchmarkSystems.SsEthanolfermModule.get_equation_strings(problem_name)
     elseif startswith(problem_name, "ss_sosrepair")
@@ -73,6 +58,25 @@ function get_ground_truth_equations(problem_name)
         return BenchmarkSystems.SsCadBAModule.get_equation_strings(problem_name)
     elseif startswith(problem_name, "ss_clock")
         return BenchmarkSystems.SsClockModule.get_equation_strings(problem_name)
+    # Chemical Rate Problems (check last - generic names without prefix)
+    elseif startswith(problem_name, "simpleLin")
+        return BenchmarkSystems.SimpleLinModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "simpleFb")
+        return BenchmarkSystems.SimpleFbModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "threeGenes")
+        return BenchmarkSystems.ThreeGenesModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "metabol")
+        return BenchmarkSystems.MetabolModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "feedf")
+        return BenchmarkSystems.FeedfModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "inhosc")
+        return BenchmarkSystems.InhoscModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "bifeedb")
+        return BenchmarkSystems.BifeedbModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "cytokine")
+        return BenchmarkSystems.CytokineModule.get_equation_strings(problem_name)
+    elseif startswith(problem_name, "osc")
+        return BenchmarkSystems.OscModule.get_equation_strings(problem_name)
     else
         return ["Ground truth equations not yet implemented for: $problem_name"]
     end
@@ -360,7 +364,7 @@ function benchmark_all_problems(;
     # Save results if requested
     if save_results
         timestamp = Dates.format(now(), "yyyymmdd_HHMMSS")
-        filename = "benchmark_results_$(timestamp).txt"
+        filename = "results/benchmark_results/benchmark_results_$(timestamp).txt"
         
         open(filename, "w") do io
             println(io, "ODE Discovery Benchmark Results")
