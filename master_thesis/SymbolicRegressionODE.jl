@@ -134,7 +134,7 @@ Create feature matrix for symbolic regression: [t, x1, x2, ..., u1, u2, ...]
 # Arguments
 - `t`: Time vector
 - `X`: State matrix (n_time × n_states)
-- `inputs`: Dictionary of input functions (optional)
+- `inputs`: Dictionary of input vectors or functions (optional)
 
 # Returns
 - Feature matrix (n_features × n_time) where features are [t; states; inputs]
@@ -149,8 +149,14 @@ function create_feature_matrix(t::Vector, X::Matrix, inputs::Dict=Dict())
     if !isempty(inputs)
         input_keys = sort(collect(keys(inputs)))
         for key in input_keys
-            input_func = inputs[key]
-            input_values = [input_func(ti) for ti in t]
+            input_data = inputs[key]
+            # Handle both vectors and functions
+            if input_data isa AbstractVector
+                input_values = input_data
+            else
+                # Assume it's a function
+                input_values = [input_data(ti) for ti in t]
+            end
             features = vcat(features, input_values')
         end
     end
@@ -283,8 +289,14 @@ function evaluate_ode_system(trees::Vector, loss_config::IntegrationLoss)
     # Create input interpolators if inputs exist
     input_interps = Dict()
     if !isempty(loss_config.inputs)
-        for (key, func) in loss_config.inputs
-            input_values = [func(t) for t in loss_config.t]
+        for (key, input_data) in loss_config.inputs
+            # Handle both vectors and functions
+            if input_data isa AbstractVector
+                input_values = input_data
+            else
+                # Assume it's a function
+                input_values = [input_data(t) for t in loss_config.t]
+            end
             input_interps[key] = LinearInterpolation(loss_config.t, input_values)
         end
     end

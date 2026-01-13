@@ -25,6 +25,7 @@ include("benchmarkProblems/BenchmarkSystems.jl")
 
 using .SymbolicRegressionODE
 using .BenchmarkSystems
+using SymbolicRegression
 
 # Load a benchmark problem
 experiments = BenchmarkSystems.load_problem("simpleLin1")
@@ -44,8 +45,14 @@ result = discover_ode_system(experiments; ode_options=options)
 
 # Display results
 println("Integration loss: ", result.integration_loss)
+
+# Create SR Options for string_tree (needs binary/unary operators)
+sr_opts = SymbolicRegression.Options(
+    binary_operators=options.binary_operators,
+    unary_operators=options.unary_operators
+)
 for (i, tree) in enumerate(result.best_trees)
-    println("dx$i/dt = ", string_tree(tree, options))
+    println("dx$i/dt = ", string_tree(tree, sr_opts))
 end
 ```
 
@@ -142,13 +149,20 @@ Experiments returned by benchmark problems have this structure:
 experiment = Dict(
     :t => [0.0, 0.1, 0.2, ...],           # Time vector
     :X => [x1_vals x2_vals ...],          # State matrix (n_time × n_states)
-    :inputs => Dict(                       # Input functions (optional)
-        :u1 => t -> sin(t),
-        :u2 => t -> 2.0
+    :inputs => Dict(                       # Input vectors or functions (optional)
+        :X1 => [3.0, 3.0, 3.0, ...],      # Constant input (as vector)
+        :X2 => [2.0, 2.0, 2.0, ...]       # Another input
+        # OR as functions: :u1 => t -> sin(t)
     ),
     :params => (param1=val1, ...)         # Parameters used to generate data
 )
 ```
+
+**Note**: The `inputs` dictionary can contain either:
+- **Vectors**: Pre-computed input values (one per time point), as used by benchmark problems
+- **Functions**: Callable functions of time `t -> value`, useful for custom problems with analytical inputs
+
+Both formats are automatically handled by the discovery algorithm.
 
 ## Advanced Usage
 
@@ -180,11 +194,17 @@ options = ODERegressionOptions(
 ```julia
 result = discover_ode_system(experiments; ode_options=options)
 
+# Create SR Options for displaying equations
+sr_opts = SymbolicRegression.Options(
+    binary_operators=options.binary_operators,
+    unary_operators=options.unary_operators
+)
+
 # All candidates from Stage 1
 for (i, candidates) in enumerate(result.derivative_candidates)
     println("\nState $i has $(length(candidates)) candidates:")
     for (j, member) in enumerate(candidates[1:min(3, end)])
-        println("  $j: ", string_tree(member.tree, options))
+        println("  $j: ", string_tree(member.tree, sr_opts))
     end
 end
 
