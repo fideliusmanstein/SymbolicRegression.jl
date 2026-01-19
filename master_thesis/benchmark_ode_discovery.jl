@@ -218,7 +218,7 @@ function benchmark_single_problem(problem_name;
     
     try
         # Discover ODE system
-        result = discover_ode_system(experiments; ode_options=ode_options)
+        result = SymbolicRegressionODE.discover_ode_system(experiments; ode_options=ode_options)
         
         discovery_time = time() - start_time
         
@@ -244,6 +244,15 @@ function benchmark_single_problem(problem_name;
         println("Discovery time: ", @sprintf("%.2f", discovery_time), " seconds")
         println("Integration loss: ", @sprintf("%.6e", result.integration_loss))
         println("Number of states: ", n_states)
+        println("\nGround Truth Equations:")
+        for (i, eq) in enumerate(ground_truth_equations)
+            println("  ", eq)
+        end
+        println("\nDiscovered Equations:")
+        for (i, eq) in enumerate(discovered_equations)
+            println("  X", i, "' = ", eq)
+        end
+        println("-"^80)
         
         return Dict(
             "problem_name" => problem_name,
