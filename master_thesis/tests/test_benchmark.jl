@@ -131,7 +131,7 @@ println()
 
 # Run all benchmark tests
 results_summary = Dict()
-results_file = "test_results_$(Dates.format(now(), "yyyymmdd_HHMMSS")).txt"
+results_file = "tests/test_results_$(Dates.format(now(), "yyyymmdd_HHMMSS")).txt"
 
 # Write header to results file
 open(results_file, "w") do f
