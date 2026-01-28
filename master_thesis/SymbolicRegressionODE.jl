@@ -165,38 +165,81 @@ function create_feature_matrix(t::Vector, X::Matrix, inputs::Dict=Dict())
 end
 
 """
-    discover_derivatives(t, X, inputs, ode_options)
+    aggregate_features_and_derivatives(experiments, ode_options)
 
-Stage 1: Discover derivative equations using symbolic regression on numerical derivatives.
+Combine features and derivatives from all trajectories.
 
 # Arguments
-- `t`: Time vector
-- `X`: State matrix (n_time × n_states)
-- `inputs`: Dictionary of input functions
+- `experiments`: Vector of experiment dicts with keys :t, :X, :inputs
+- `ode_options`: ODERegressionOptions
+
+# Returns
+- Tuple of (combined_features, combined_derivatives) for symbolic regression
+"""
+function aggregate_features_and_derivatives(experiments::Vector, ode_options::ODERegressionOptions)
+    n_experiments = length(experiments)
+    n_states = size(experiments[1][:X], 2)
+    
+    # Collect all features and derivatives
+    all_features_list = []
+    all_derivatives_list = []
+    
+    for exp in experiments
+        t = exp[:t]
+        X_raw = exp[:X]
+        # Ensure X is a Matrix (not Adjoint or other type)
+        X = X_raw isa Matrix ? X_raw : Matrix(X_raw)
+        inputs = get(exp, :inputs, Dict())
+        
+        # Compute numerical derivatives for this trajectory
+        dX = compute_numerical_derivatives(t, X;
+            method=ode_options.differentiation_method,
+            window=ode_options.savitzky_golay_window,
+            poly_order=ode_options.savitzky_golay_order
+        )
+        
+        # Create feature matrix for this trajectory
+        # Returns matrix where rows are features, columns are time points
+        features = create_feature_matrix(t, X, inputs)
+        
+        push!(all_features_list, features)
+        push!(all_derivatives_list, dX)
+    end
+    
+    # Concatenate horizontally (along time axis)
+    # Result: more columns = more time points from all trajectories
+    combined_features = hcat(all_features_list...)  # (n_features × total_time_points)
+    combined_derivatives = vcat(all_derivatives_list...)  # (total_time_points × n_states)
+    
+    return combined_features, combined_derivatives
+end
+
+"""
+    discover_derivatives(experiments, ode_options)
+
+Stage 1: Discover derivative equations using symbolic regression on numerical derivatives.
+Now supports multiple trajectories for more robust derivative estimation.
+
+# Arguments
+- `experiments`: Vector of experiment dicts with keys :t, :X, :inputs
 - `ode_options`: ODERegressionOptions
 
 # Returns
 - Vector of PopMember vectors (one per state), each containing candidate equations
 """
-function discover_derivatives(t::Vector, X::Matrix, inputs::Dict, ode_options::ODERegressionOptions)
-    n_states = size(X, 2)
+function discover_derivatives(experiments::Vector, ode_options::ODERegressionOptions)
+    n_states = size(experiments[1][:X], 2)
     
-    # Compute numerical derivatives using specified method
-    dX = compute_numerical_derivatives(t, X; 
-        method=ode_options.differentiation_method,
-        window=ode_options.savitzky_golay_window,
-        poly_order=ode_options.savitzky_golay_order)
-    
-    # Create feature matrix [t; x1; x2; ...; u1; u2; ...]
-    features = create_feature_matrix(t, X, inputs)
+    # Get combined data from all trajectories
+    features, dX_all = aggregate_features_and_derivatives(experiments, ode_options)
     
     if ode_options.verbose
         println("="^80)
         println("Stage 1: Discovering Derivative Equations")
         println("="^80)
+        println("Number of trajectories: ", length(experiments))
         println("Number of states: ", n_states)
-        println("Number of time points: ", length(t))
-        println("Feature dimensions: ", size(features))
+        println("Combined feature dimensions: ", size(features))
         println()
     end
     
@@ -216,10 +259,10 @@ function discover_derivatives(t::Vector, X::Matrix, inputs::Dict, ode_options::O
             println("\nSearching for dx$(i)/dt...")
         end
         
-        # Target is derivative of state i
-        target = dX[:, i]
+        # Target is derivative of state i (from ALL trajectories combined)
+        target = dX_all[:, i]
         
-        # Run symbolic regression
+        # Run symbolic regression on combined data
         if ode_options.verbose
             hall_of_fame = equation_search(
                 features, target;
@@ -255,14 +298,52 @@ end
 
 Loss function that evaluates candidate ODE systems by integrating them
 and comparing to observed trajectories.
+
+Can hold either a single trajectory or multiple trajectories for robust evaluation.
 """
 struct IntegrationLoss
-    t::Vector{Float64}
-    X_observed::Matrix{Float64}
-    inputs::Dict
+    trajectories::Vector{Dict}  # Each entry: Dict(:t, :X_observed, :inputs)
     
-    function IntegrationLoss(t, X_observed, inputs=Dict())
-        new(t, X_observed, inputs)
+    # Constructor for multiple trajectories
+    function IntegrationLoss(trajectories::Vector)
+        # Convert to Vector{Dict} and normalize keys
+        dict_trajectories = Dict[]
+        for traj in trajectories
+            if traj isa Dict
+                # Normalize: ensure we have :t, :X_observed, :inputs
+                normalized = Dict{Symbol,Any}()
+                
+                # Time vector
+                normalized[:t] = traj[:t]
+                
+                # State matrix (handle :X or :X_observed)
+                if haskey(traj, :X_observed)
+                    X_raw = traj[:X_observed]
+                elseif haskey(traj, :X)
+                    X_raw = traj[:X]
+                else
+                    error("Trajectory must have :X or :X_observed key")
+                end
+                # Ensure it's a Matrix
+                normalized[:X_observed] = X_raw isa Matrix ? X_raw : Matrix(X_raw)
+                
+                # Inputs (optional)
+                normalized[:inputs] = get(traj, :inputs, Dict())
+                
+                push!(dict_trajectories, normalized)
+            else
+                error("Each trajectory must be a Dict with keys :t, :X (or :X_observed), :inputs")
+            end
+        end
+        new(dict_trajectories)
+    end
+    
+    # Convenience constructor for single trajectory (backward compatible)
+    function IntegrationLoss(t::Vector, X_observed::AbstractMatrix, inputs::Dict=Dict())
+        # Ensure X_observed is a Matrix (not Adjoint or other type)
+        X_mat = X_observed isa Matrix ? X_observed : Matrix(X_observed)
+        trajectories = [Dict(:t => t, :X_observed => X_mat, :inputs => inputs)]
+        new(trajectories)
     end
 end
 
@@ -270,114 +351,87 @@ end
     evaluate_ode_system(trees, loss_config)
 
 Evaluate a candidate ODE system by integrating and comparing to data.
+Now supports multiple trajectories for robust evaluation.
 
 # Arguments
 - `trees`: Vector of expression trees, one per state (dx_i/dt = trees[i])
-- `loss_config`: IntegrationLoss configuration
+- `loss_config`: IntegrationLoss configuration (can contain multiple trajectories)
 
 # Returns
-- Loss value (mean squared error between integrated and observed trajectories)
+- Loss value (mean squared error averaged across all trajectories)
 """
 function evaluate_ode_system(trees::Vector, loss_config::IntegrationLoss)
     n_states = length(trees)
-    n_time = length(loss_config.t)
+    n_trajectories = length(loss_config.trajectories)
     
-    # Initial conditions from first time point
-    x0 = loss_config.X_observed[1, :]
-    tspan = (loss_config.t[1], loss_config.t[end])
+    total_loss = 0.0
+    valid_trajectories = 0
     
-    # Create input interpolators if inputs exist
-    input_interps = Dict()
-    if !isempty(loss_config.inputs)
-        for (key, input_data) in loss_config.inputs
-            # Handle both vectors and functions
-            if input_data isa AbstractVector
-                input_values = input_data
-            else
-                # Assume it's a function
-                input_values = [input_data(t) for t in loss_config.t]
-            end
-            input_interps[key] = LinearInterpolation(loss_config.t, input_values)
-        end
-    end
-    
-    # Define ODE system dynamics
-    function ode_dynamics!(dx, x, p, t_curr)
-        # Check for invalid states
-        if !all(isfinite, x) || !isfinite(t_curr)
-            fill!(dx, Inf)
-            return
-        end
+    # Evaluate on each trajectory
+    for trajectory in loss_config.trajectories
+        t = trajectory[:t]
+        X_observed = trajectory[:X_observed]
+        inputs = get(trajectory, :inputs, Dict())
+        n_time = length(t)
         
-        # Build feature vector [t; x1; x2; ...; u1; u2; ...]
-        features = vcat([t_curr], x)
+        # Initial conditions for THIS trajectory
+        x0 = X_observed[1, :]
+        tspan = (t[1], t[end])
         
-        # Add interpolated inputs
-        if !isempty(input_interps)
-            input_keys = sort(collect(keys(input_interps)))
-            for key in input_keys
-                push!(features, input_interps[key](t_curr))
-            end
-        end
+        # Create input interpolators for THIS trajectory
+        input_interps = setup_input_interpolations(t, inputs)
         
-        # Reshape for tree evaluation
-        feature_matrix = reshape(features, :, 1)
+        # Define ODE system dynamics using shared helper
+        ode_dynamics! = create_ode_function(trees, input_interps)
         
-        # Evaluate each tree to get derivatives
+        # Solve ODE system for this trajectory
         try
-            for i in 1:n_states
-                dx[i] = trees[i](feature_matrix)[1]
-            end
+            prob = ODEProblem(ode_dynamics!, x0, tspan)
+            sol = solve(
+                prob,
+                AutoTsit5(Rosenbrock23()),
+                saveat=t,
+                maxiters=5000,
+                abstol=1e-3,
+                reltol=1e-3
+            )
             
-            # Check for valid outputs
-            if !all(isfinite, dx)
-                fill!(dx, Inf)
+            # Check if solution succeeded and has correct length
+            if SciMLBase.successful_retcode(sol) && length(sol.u) == n_time
+                # Convert solution to matrix
+                X_predicted = hcat([sol.u[i] for i in 1:length(sol.u)]...)'
+                
+                # Check all predictions are finite
+                if all(isfinite, X_predicted)
+                    # Mean squared error for this trajectory
+                    loss_traj = sum((X_predicted .- X_observed).^2) / length(X_predicted)
+                    total_loss += loss_traj
+                    valid_trajectories += 1
+                end
             end
-        catch
-            fill!(dx, Inf)
+        catch e
+            # Integration failed for this trajectory - continue to next
         end
     end
     
-    # Solve ODE system
-    try
-        prob = ODEProblem(ode_dynamics!, x0, tspan)
-        sol = solve(
-            prob,
-            AutoTsit5(Rosenbrock23()),
-            saveat=loss_config.t,
-            maxiters=5000,
-            abstol=1e-3,
-            reltol=1e-3
-        )
-        
-        # Check if solution succeeded and has correct length
-        if SciMLBase.successful_retcode(sol) && length(sol.u) == n_time
-            # Convert solution to matrix
-            X_predicted = hcat([sol.u[i] for i in 1:length(sol.u)]...)'
-            
-            # Check all predictions are finite
-            if all(isfinite, X_predicted)
-                # Mean squared error
-                return sum((X_predicted .- loss_config.X_observed).^2) / length(X_predicted)
-            end
-        end
-    catch e
-        # Integration failed
+    # Return average loss over all valid trajectories
+    if valid_trajectories > 0
+        return total_loss / valid_trajectories
+    else
+        return Inf  # All trajectories failed
     end
-    
-    return Inf
 end
 
 """
-    refine_with_integration(derivative_candidates, t, X, inputs, ode_options)
+    refine_with_integration(derivative_candidates, experiments, ode_options)
 
-Stage 2: Refine equations by testing combinations with integration-based loss.
+Stage 2: Refine equations by testing combinations with integration-based loss,
+then iteratively improving them together using symbolic regression.
+Now supports multiple trajectories for robust evaluation.
 
 # Arguments
 - `derivative_candidates`: Vector of candidate equations per state
-- `t`: Time vector
-- `X`: State matrix
-- `inputs`: Input functions dictionary
+- `experiments`: Vector of experiment dicts with keys :t, :X, :inputs
 - `ode_options`: ODERegressionOptions
 
 # Returns
@@ -385,9 +439,7 @@ Stage 2: Refine equations by testing combinations with integration-based loss.
 """
 function refine_with_integration(
     derivative_candidates::Vector{Vector},
-    t::Vector,
-    X::Matrix,
-    inputs::Dict,
+    experiments::Vector,
     ode_options::ODERegressionOptions
 )
     n_states = length(derivative_candidates)
@@ -396,6 +448,7 @@ function refine_with_integration(
         println("\n" * "="^80)
         println("Stage 2: Integration-Based Refinement")
         println("="^80)
+        println("Number of trajectories to evaluate: ", length(experiments))
     end
     
     # Filter candidates by complexity
@@ -422,10 +475,16 @@ function refine_with_integration(
         println()
     end
     
-    # Create loss configuration
-    loss_config = IntegrationLoss(t, X, inputs)
+    # Create loss configuration from ALL trajectories
+    loss_config = IntegrationLoss(experiments)
     
-    # Search for best combination
+    # =========================================================================
+    # Step 1: Find best initial combination from candidates
+    # =========================================================================
+    if ode_options.verbose
+        println("Step 1: Finding best initial combination...")
+    end
+    
     best_loss = Inf
     best_trees = nothing
     best_indices = nothing
@@ -440,7 +499,7 @@ function refine_with_integration(
             # Progress indicator
             if ode_options.verbose && combinations_tested % max(1, div(total_combinations, 10)) == 0
                 progress_pct = round(100 * combinations_tested / total_combinations, digits=1)
-                println("Progress: $combinations_tested/$total_combinations ($progress_pct%)")
+                println("  Progress: $combinations_tested/$total_combinations ($progress_pct%)")
             end
             
             loss = evaluate_ode_system(current_trees, loss_config)
@@ -466,18 +525,104 @@ function refine_with_integration(
     # Start search
     test_combinations(1, [], Int[])
     
-    # Display results
+    initial_loss = best_loss
+    initial_trees = copy(best_trees)
+    
+    if ode_options.verbose
+        println("  Initial best loss: ", round(initial_loss, sigdigits=4))
+    end
+    
+    # =========================================================================
+    # Step 2: Iteratively refine equations together
+    # =========================================================================
+    if ode_options.niterations_integration > 0
+        if ode_options.verbose
+            println("\nStep 2: Integration-based refinement ($(ode_options.niterations_integration) iterations per equation)...")
+            println("  Each equation will be refined using integration residuals")
+        end
+        
+        # Refine each equation using integration residuals
+        for state_idx in 1:n_states
+            if ode_options.verbose
+                println("\n  Refining equation $state_idx...")
+            end
+            
+            # Get features and synthetic targets from current system's residuals
+            features, synthetic_target = compute_integration_residuals(
+                best_trees, state_idx, experiments, ode_options
+            )
+            
+            if features === nothing || synthetic_target === nothing
+                if ode_options.verbose
+                    println("    Skipped (could not compute residuals)")
+                end
+                continue  # Skip if residuals can't be computed
+            end
+            
+            # Run symbolic regression to improve this equation
+            search_options = SymbolicRegression.Options(;
+                binary_operators=ode_options.binary_operators,
+                unary_operators=ode_options.unary_operators,
+                maxsize=ode_options.complexity_integration,
+                seed=ode_options.seed + state_idx
+            )
+            
+            hof = with_logger(NullLogger()) do
+                equation_search(
+                    features, synthetic_target;
+                    options=search_options,
+                    niterations=ode_options.niterations_integration,
+                    parallelism=ode_options.parallelism
+                )
+            end
+            
+            # Get best candidate and test if it improves the system
+            pareto = calculate_pareto_frontier(hof)
+            
+            improved = false
+            for candidate in pareto
+                # Test with this candidate replacing current equation
+                test_trees = copy(best_trees)
+                test_trees[state_idx] = candidate.tree
+                
+                test_loss = evaluate_ode_system(test_trees, loss_config)
+                
+                if test_loss < best_loss
+                    best_loss = test_loss
+                    best_trees = test_trees
+                    improved = true
+                    if ode_options.verbose
+                        improvement = round((initial_loss - best_loss) / initial_loss * 100, digits=1)
+                        println("    ✓ Improved! Loss: $(round(best_loss, sigdigits=4)) ($improvement% better than initial)")
+                    end
+                    break  # Take first improvement
+                end
+            end
+            
+            if !improved && ode_options.verbose
+                println("    No improvement found")
+            end
+        end
+        
+        if ode_options.verbose
+            final_improvement = round((initial_loss - best_loss) / initial_loss * 100, digits=1)
+            println("\n  Refinement complete!")
+            println("    Initial loss: ", round(initial_loss, sigdigits=4))
+            println("    Final loss: ", round(best_loss, sigdigits=4))
+            println("    Improvement: $final_improvement%")
+        end
+    end
+    
+    # =========================================================================
+    # Display final results
+    # =========================================================================
     if ode_options.verbose
         println("\n" * "="^80)
         println("Best ODE System Found")
         println("="^80)
         
-        for (i, (tree, idx)) in enumerate(zip(best_trees, best_indices))
-            member = filtered_candidates[i][idx]
-            complexity = compute_complexity(member, sr_options)
-            println("\nState $i (candidate $idx/$(candidates_per_state[i])):")
-            println("  Derivative loss: ", round(member.loss, sigdigits=4))
-            println("  Complexity: ", complexity)
+        for (i, tree) in enumerate(best_trees)
+            println("\nState $i:")
             println("  dx$i/dt = ", string_tree(tree, sr_options))
         end
         
@@ -490,9 +635,166 @@ function refine_with_integration(
 end
 
 """
+    compute_integration_residuals(trees, state_idx, experiments, ode_options)
+
+Compute synthetic training targets for refining a specific equation.
+This creates targets based on how well the current ODE system integrates.
+
+# Arguments
+- `trees`: Current equation trees for all states
+- `state_idx`: Which state to compute residuals for
+- `experiments`: Vector of experiment dictionaries
+- `ode_options`: ODERegressionOptions
+
+# Returns
+- `(features, targets)`: Feature matrix and target vector for symbolic regression
+"""
+function compute_integration_residuals(
+    trees::Vector,
+    state_idx::Int,
+    experiments::Vector,
+    ode_options::ODERegressionOptions
+)
+    n_states = length(trees)
+    
+    # Collect data from all trajectories
+    all_features = []
+    all_targets = []
+    
+    for exp in experiments
+        t = exp[:t]
+        X_obs = exp[:X]
+        inputs = get(exp, :inputs, Dict())
+        
+        # Integrate current system
+        try
+            # Setup input interpolations
+            input_interps = setup_input_interpolations(t, inputs)
+            
+            # Create ODE problem
+            x0 = X_obs[1, :]
+            tspan = (t[1], t[end])
+            
+            ode_function = create_ode_function(trees, input_interps)
+            prob = ODEProblem(ode_function, x0, tspan)
+            
+            # Solve ODE
+            sol = solve(prob, Tsit5(); saveat=t, abstol=1e-6, reltol=1e-6)
+            
+            if sol.retcode != :Success
+                continue
+            end
+            
+            X_pred = hcat(sol.u...)'
+            
+            # Compute residuals for this state
+            residuals = X_obs[:, state_idx] - X_pred[:, state_idx]
+            
+            # Compute numerical derivative of residuals
+            # This tells us how to adjust dx/dt
+            dResiduals = compute_numerical_derivatives(t, reshape(residuals, :, 1);
+                method=ode_options.differentiation_method)[:, 1]
+            
+            # Create features at each time point
+            for i in 1:length(t)
+                feature_vec = [t[i]; X_pred[i, :]]
+                
+                # Add inputs
+                if !isempty(input_interps)
+                    for key in sort(collect(keys(input_interps)))
+                        push!(feature_vec, input_interps[key](t[i]))
+                    end
+                end
+                
+                push!(all_features, feature_vec)
+                
+                # Target: current dx/dt prediction + correction from residuals
+                current_dxdt = trees[state_idx](reshape(feature_vec, :, 1))[1]
+                push!(all_targets, current_dxdt + dResiduals[i])
+            end
+            
+        catch e
+            # Skip this trajectory if integration fails
+            continue
+        end
+    end
+    
+    if isempty(all_features)
+        return nothing, nothing
+    end
+    
+    # Convert to matrices
+    features = hcat(all_features...)'  # (n_samples × n_features)
+    features = features'  # Transpose to (n_features × n_samples) for equation_search
+    targets = Vector{Float64}(all_targets)
+    
+    return features, targets
+end
+
+"""
+    create_ode_function(trees, input_interps)
+
+Create an ODE function from equation trees and input interpolations.
+"""
+function create_ode_function(trees, input_interps)
+    n_states = length(trees)
+    
+    function ode_dynamics!(dx, x, p, t_curr)
+        if !all(isfinite, x) || !isfinite(t_curr)
+            fill!(dx, Inf)
+            return
+        end
+        
+        features = vcat([t_curr], x)
+        
+        if !isempty(input_interps)
+            for key in sort(collect(keys(input_interps)))
+                push!(features, input_interps[key](t_curr))
+            end
+        end
+        
+        feature_matrix = reshape(features, :, 1)
+        
+        try
+            for i in 1:n_states
+                dx[i] = trees[i](feature_matrix)[1]
+            end
+            
+            if !all(isfinite, dx)
+                fill!(dx, Inf)
+            end
+        catch
+            fill!(dx, Inf)
+        end
+    end
+    
+    return ode_dynamics!
+end
+
+"""
+    setup_input_interpolations(t, inputs)
+
+Create interpolation functions for time-varying inputs.
+"""
+function setup_input_interpolations(t, inputs)
+    input_interps = Dict()
+    
+    if !isempty(inputs)
+        for (name, values) in inputs
+            if length(values) == length(t)
+                input_interps[name] = LinearInterpolation(t, values, extrapolation_bc=Line())
+            end
+        end
+    end
+    
+    return input_interps
+end
+
+"""
     discover_ode_system(experiments; ode_options=ODERegressionOptions())
 
 Main function: Discover ODE system from experimental time-series data.
+Now supports multiple trajectories for robust ODE discovery.
 
 # Arguments
 - `experiments`: Vector of experiment dictionaries from benchmark problems.
@@ -503,7 +805,7 @@ Main function: Discover ODE system from experimental time-series data.
 - Named tuple with:
   - `derivative_candidates`: All candidates from Stage 1
   - `best_trees`: Best equation trees from Stage 2
-  - `integration_loss`: Integration-based loss
+  - `integration_loss`: Integration-based loss (averaged across all trajectories)
   - `best_indices`: Indices of selected candidates
 
 # Example
@@ -511,8 +813,11 @@ Main function: Discover ODE system from experimental time-series data.
 include("benchmarkProblems/BenchmarkSystems.jl")
 using .BenchmarkSystems
 
-# Load a benchmark problem
+# Load a benchmark problem (single trajectory)
 experiments = BenchmarkSystems.load_problem("simpleLin1")
+
+# Or load with multiple trajectories for better results
+# experiments = BenchmarkSystems.load_problem("simpleLin1", num_trajectories=3)
 
 # Discover ODE system
 result = discover_ode_system(experiments)
@@ -526,32 +831,40 @@ function discover_ode_system(
     experiments::Vector;
     ode_options::ODERegressionOptions = ODERegressionOptions()
 )
-    # Use first experiment for ODE discovery
-    # (In practice, you might want to combine multiple experiments)
-    exp = experiments[1]
+    # Validate experiments
+    if isempty(experiments)
+        error("Must provide at least one experiment")
+    end
     
-    t = exp[:t]
-    X_raw = exp[:X]
-    # Ensure X is a Matrix (not Adjoint or other type)
-    X = X_raw isa AbstractMatrix ? Matrix(X_raw) : X_raw
-    inputs = get(exp, :inputs, Dict())
+    # Validate all have same state dimensions
+    n_states_first = size(experiments[1][:X], 2)
+    for i in 2:length(experiments)
+        n_states_i = size(experiments[i][:X], 2)
+        if n_states_i != n_states_first
+            error("All experiments must have same number of states. " *
+                  "Experiment 1 has $n_states_first states, experiment $i has $n_states_i states.")
+        end
+    end
     
     if ode_options.verbose
         println("\n" * "="^80)
         println("Symbolic Regression for Differential Equations")
         println("="^80)
-        println("Time points: ", length(t))
-        println("States: ", size(X, 2))
-        println("Inputs: ", length(inputs))
+        println("Number of experiments/trajectories: ", length(experiments))
+        println("States per experiment: ", n_states_first)
+        for (i, exp) in enumerate(experiments)
+            println("  Experiment $i: $(length(exp[:t])) time points, " *
+                   "$(length(get(exp, :inputs, Dict()))) inputs")
+        end
         println()
     end
     
-    # Stage 1: Discover derivatives from numerical differentiation
-    derivative_candidates = discover_derivatives(t, X, inputs, ode_options)
+    # Stage 1: Discover derivatives using ALL trajectories
+    derivative_candidates = discover_derivatives(experiments, ode_options)
     
-    # Stage 2: Refine with integration-based loss
+    # Stage 2: Refine with integration-based loss using ALL trajectories
     best_trees, integration_loss, best_indices = refine_with_integration(
-        derivative_candidates, t, X, inputs, ode_options
+        derivative_candidates, experiments, ode_options
     )
     
     return (

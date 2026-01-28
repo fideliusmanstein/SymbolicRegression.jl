@@ -387,11 +387,17 @@ function problem_info(problem_name::String)
 end
 
 """
-    load_problem(problem_name::String)
+    load_problem(problem_name::String; num_trajectories::Int=1)
 
-Load a benchmark problem by name.
+Load a specific benchmark problem dataset by name.
 
-Returns the experiments data structure for the specified problem.
+Arguments:
+- problem_name: Name of the problem (e.g., "simpleLin1", "simpleLin2")
+- num_trajectories: Number of trajectories per experiment (default: 1)
+                    If > 1, generates multiple trajectories from different initial conditions
+
+Returns:
+- Vector of experiment dictionaries with keys :t, :X, :inputs, :params
 
 Available problems:
 - simpleLin1, simpleLin2
@@ -403,16 +409,21 @@ Available problems:
 - inhosc1, inhosc2
 - bifeedb1, bifeedb2
 
-Example:
+Examples:
 ```julia
-experiments = load_problem("simpleLin2")
+# Load standard benchmark (1 trajectory per experiment)
+experiments = load_problem("simpleLin1")
+
+# Load with multiple trajectories for robustness
+experiments = load_problem("simpleLin1", num_trajectories=3)
 ```
 """
-function load_problem(problem_name::String)
+function load_problem(problem_name::String; num_trajectories::Int=1)
     # Chemical Rate Equations
     if startswith(problem_name, "simpleLin")
         return SimpleLinModule.generate_simplelin_experiments(
-            noise_std = problem_name == "simpleLin1" ? 0.0 : 0.1)
+            noise_std = problem_name == "simpleLin1" ? 0.0 : 0.1,
+            num_trajectories = num_trajectories)
     elseif startswith(problem_name, "simpleFb")
         return SimpleFbModule.generate_simplefb_experiments(problem=problem_name)
     elseif startswith(problem_name, "osc")

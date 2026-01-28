@@ -192,14 +192,18 @@ Benchmark ODE discovery on a single problem.
 - Dictionary with benchmark results (success based on integration_loss < 1.0)
 """
 function benchmark_single_problem(problem_name; 
-                                 ode_options=nothing)
+                                 ode_options=nothing,
+                                 num_trajectories=1)
     
     println("\n" * "="^80)
     println("Benchmarking: $problem_name")
+    if num_trajectories > 1
+        println("Multi-trajectory mode: $num_trajectories ICs per experiment")
+    end
     println("="^80)
     
-    # Load problem
-    experiments = BenchmarkSystems.load_problem(problem_name)
+    # Load problem with multiple trajectories for robust evaluation
+    experiments = BenchmarkSystems.load_problem(problem_name, num_trajectories=num_trajectories)
     
     # Use default fast options if not provided
     if ode_options === nothing

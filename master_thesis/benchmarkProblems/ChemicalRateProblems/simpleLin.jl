@@ -172,10 +172,17 @@ Each experiment uses different input combinations:
      7     0.5    5.0    1.0    0.0    0.0
      8     5.0    0.5    1.0    0.0    0.0
 
+Arguments:
+- noise_std: Standard deviation of noise (0.0 for no noise, 0.1 for 10%)
+- n_points: Number of time points per experiment
+- num_trajectories: Number of trajectories per experiment (different initial conditions)
+                    If > 1, generates multiple trajectories from different ICs for each experiment.
+                    ICs are sampled to satisfy conservation law: X3_0 + X4_0 + X5_0 = 1.0
+
 Returns:
-- experiments: Vector of dictionaries, each containing :t, :X, :inputs, :params
+- experiments: Vector of dictionaries, each containing :t, :X, :inputs, :params, :ic
 """
-function generate_simplelin_experiments(; noise_std=0.1, n_points=13)
+function generate_simplelin_experiments(; noise_std=0.1, n_points=13, num_trajectories=1)
     experiment_params = [
         (X1=3.0, X2=2.0),
         (X1=4.0, X2=5.0),
@@ -190,24 +197,44 @@ function generate_simplelin_experiments(; noise_std=0.1, n_points=13)
     experiments = []
     
     for (i, params) in enumerate(experiment_params)
-        t, X, input_values = generate_simplelin_data(
-            X1_const=params.X1,
-            X2_const=params.X2,
-            X3_0=1.0,
-            X4_0=0.0,
-            X5_0=0.0,
-            tspan=(0.0, 3.0),
-            n_points=n_points,
-            noise_std=noise_std
-        )
-        
-        push!(experiments, Dict(
-            :experiment => i,
-            :t => t,
-            :X => X,
-            :inputs => input_values,
-            :params => params
-        ))
+        # Generate num_trajectories trajectories for this experiment
+        for traj_idx in 1:num_trajectories
+            # Default IC for first trajectory, varied for others
+            if traj_idx == 1
+                X3_0, X4_0, X5_0 = 1.0, 0.0, 0.0
+            else
+                # Sample random ICs satisfying conservation law: X3 + X4 + X5 = 1.0
+                # Use Dirichlet-like sampling
+                r1, r2 = rand(2)
+                if r1 > r2
+                    r1, r2 = r2, r1
+                end
+                X3_0 = r1
+                X4_0 = r2 - r1
+                X5_0 = 1.0 - r2
+            end
+            
+            t, X, input_values = generate_simplelin_data(
+                X1_const=params.X1,
+                X2_const=params.X2,
+                X3_0=X3_0,
+                X4_0=X4_0,
+                X5_0=X5_0,
+                tspan=(0.0, 3.0),
+                n_points=n_points,
+                noise_std=noise_std
+            )
+            
+            push!(experiments, Dict(
+                :experiment => i,
+                :trajectory => traj_idx,
+                :t => t,
+                :X => X,
+                :inputs => input_values,
+                :params => params,
+                :ic => (X3_0=X3_0, X4_0=X4_0, X5_0=X5_0)
+            ))
+        end
     end
     
     return experiments
