@@ -1,7 +1,7 @@
 """
-test_benchmark.jl
+benchmark.jl
 
-Test suite for all 63 ODE benchmark systems with multi-trajectory evaluation.
+Benchmark suite for all 63 ODE benchmark systems with multi-trajectory evaluation.
 
 Features:
 - Tests all benchmark problems with minimal configuration
@@ -9,7 +9,7 @@ Features:
 - Includes timeout protection for large systems
 - Generates detailed test reports
 
-Run with: julia --project=.. test_benchmark.jl
+Run with: julia --project=.. benchmark.jl
 """
 
 # =============================================================================
@@ -19,7 +19,8 @@ Run with: julia --project=.. test_benchmark.jl
 # Suppress progress bars and verbose output
 ENV["SYMBOLIC_REGRESSION_PROGRESS"] = "false"
 
-include("../benchmark_ode_discovery.jl")
+include("benchmark_ode_discovery.jl")
+include("benchmark_reporting.jl")
 using .SymbolicRegressionODE
 using .BenchmarkSystems
 using Test
@@ -33,6 +34,9 @@ Logging.disable_logging(Logging.Warn)
 # Constants and Configuration
 # =============================================================================
 
+# Custom operators
+square(x) = x * x
+
 # Problems that timeout with minimal config (too many variables/experiments)
 const TIMEOUT_PROBLEMS = [
     "ss_15genes1",   # 15 states, 10-20 experiments
@@ -44,14 +48,14 @@ const TIMEOUT_PROBLEMS = [
 
 # Test configuration - minimal for fast testing
 const TEST_OPTIONS = SymbolicRegressionODE.ODERegressionOptions(
-    niterations_derivative = 15,
-    niterations_integration = 5,
-    complexity_derivative = 10,
-    complexity_integration = 10,
+    niterations_derivative = 100,
+    niterations_integration = 20,
+    complexity_derivative = 15,
+    complexity_integration = 15,
     binary_operators = (+, *, -, /),
-    unary_operators = (),
+    unary_operators = (square,),
     parallelism = :serial,  # Avoid blocking issues
-    verbose = false
+    verbose = true
 )
 
 # Multi-trajectory configuration for robust evaluation
@@ -59,7 +63,7 @@ const NUM_TRAJECTORIES = 3  # Use 3 different ICs per experiment for validation
 
 # Maximum number of problems to test (nothing = all problems)
 # Set to a smaller number for faster iteration/debugging
-const MAX_PROBLEMS_TO_TEST = 3  # Options: nothing, 5, 10, 20, etc.
+const MAX_PROBLEMS_TO_TEST = 1  # Options: nothing, 5, 10, 20, etc.
 
 # Timeout protection (seconds, nothing = no timeout)
 const TIMEOUT_SECONDS = nothing  # Options: nothing, 60, 180, 300, etc.
@@ -204,140 +208,24 @@ function run_with_timeout(problem_name, num_trajectories, timeout_seconds)
 end
 
 # =============================================================================
-# Result Reporting
-# =============================================================================
-
-"""
-    write_result_to_file(file, result)
-
-Write a single test result to the output file.
-"""
-function write_result_to_file(file, result)
-    println(file, "Problem: $(result["problem_name"])")
-    println(file, "  Success: $(result["success"])")
-    println(file, "  Integration Loss: $(result["integration_loss"])")
-    println(file, "  Discovery Time: $(result["discovery_time"])s")
-    println(file, "  N States: $(result["n_states"])")
-    
-    if get(result, "timeout", false)
-        println(file, "  Status: TIMEOUT")
-    end
-    
-    if haskey(result, "error") && result["error"] !== nothing
-        println(file, "  Error: $(result["error"])")
-    end
-    
-    if haskey(result, "ground_truth_equations")
-        println(file, "  Ground Truth Equations:")
-        for eq in result["ground_truth_equations"]
-            println(file, "    $eq")
-        end
-    end
-    
-    if haskey(result, "discovered_equations")
-        println(file, "  Discovered Equations:")
-        for (i, eq) in enumerate(result["discovered_equations"])
-            println(file, "    X$i' = $eq")
-        end
-    end
-    
-    println(file)
-    flush(file)
-end
-
-"""
-    print_failure_diagnostics(problem_name, result)
-
-Print diagnostic information for failed tests.
-"""
-function print_failure_diagnostics(problem_name, result)
-    if get(result, "timeout", false)
-        println("\n⏱ $problem_name TIMEOUT after $(result["discovery_time"])s")
-    else
-        println("\n⚠ $problem_name FAILED:")
-        println("  Integration loss: $(result["integration_loss"])")
-        println("  Discovery time: $(result["discovery_time"])s")
-        
-        if haskey(result, "error") && result["error"] !== nothing
-            println("  Error: $(result["error"])")
-        end
-    end
-end
-
-"""
-    write_summary(file, results)
-
-Write summary statistics to the output file.
-"""
-function write_summary(file, results)
-    successes = count(r -> r["success"], values(results))
-    failures = length(results) - successes
-    
-    println(file, "="^80)
-    println(file, "SUMMARY")
-    println(file, "="^80)
-    println(file, "Completed: $(now())")
-    println(file, "✓ Successful: $successes / $(length(results))")
-    println(file, "✗ Failed: $failures / $(length(results))")
-    
-    if failures > 0
-        println(file, "\nFailed problems:")
-        for (name, result) in sort(collect(results), by=x->x[1])
-            if !result["success"]
-                loss = result["integration_loss"]
-                if get(result, "timeout", false)
-                    println(file, "  - $name (TIMEOUT)")
-                else
-                    println(file, "  - $name (loss: $(round(loss, digits=4)))")
-                end
-            end
-        end
-    end
-    
-    println(file, "="^80)
-end
-
-# =============================================================================
 # Main Test Execution
 # =============================================================================
 
 # Get test problems
 problems = get_test_problems()
 
-println("="^80)
-println("ODE Discovery Benchmark Test Suite - Multi-Trajectory")
-println("="^80)
-println("Total problems: $(length(problems.all))")
-println("Excluded (timeout): $(length(problems.excluded))")
-println("Testing: $(length(problems.testable)) problems")
-if MAX_PROBLEMS_TO_TEST !== nothing
-    println("  (Limited to first $MAX_PROBLEMS_TO_TEST for faster iteration)")
-end
-println()
-println("Configuration:")
-println("  - Derivative iterations: $(TEST_OPTIONS.niterations_derivative)")
-println("  - Integration iterations: $(TEST_OPTIONS.niterations_integration)")
-println("  - Operators: +, -, *, / (no sin, cos, exp)")
-println("  - Trajectories per experiment: $NUM_TRAJECTORIES")
-timeout_msg = TIMEOUT_SECONDS === nothing ? "none (no timeout)" : "$(TIMEOUT_SECONDS)s"
-println("  - Timeout per system: $timeout_msg")
-println("="^80)
-println()
+# Print header
+print_test_header(problems, TEST_OPTIONS, NUM_TRAJECTORIES, MAX_PROBLEMS_TO_TEST, TIMEOUT_SECONDS)
 
 # Setup results file
-results_dir = "test_results"
-mkpath(results_dir)  # Create directory if it doesn't exist
-results_file = joinpath(results_dir, "test_results_$(Dates.format(now(), "yyyymmdd_HHMMSS")).txt")
+results_dir = "benchmark_results"
+mkpath(results_dir)
+results_file = joinpath(results_dir, "results_$(Dates.format(now(), "yyyymmdd_HHMMSS")).txt")
 results_summary = Dict{String, Dict}()
 
-# Write header
+# Write header to file
 open(results_file, "w") do f
-    println(f, "="^80)
-    println(f, "ODE Discovery Benchmark Test Results")
-    println(f, "Multi-Trajectory Evaluation ($(NUM_TRAJECTORIES) ICs per experiment)")
-    println(f, "Started: $(now())")
-    println(f, "="^80)
-    println(f)
+    write_file_header(f, NUM_TRAJECTORIES)
 end
 
 # Run all tests
@@ -372,39 +260,9 @@ end
     end
 end
 
-# =============================================================================
-# Final Summary
-# =============================================================================
+# Print final summary and write to file
+print_final_summary(results_summary, results_file)
 
-println()
-println("="^80)
-println("Benchmark Test Suite Summary")
-println("="^80)
-
-successes = count(r -> r["success"], values(results_summary))
-failures = length(results_summary) - successes
-
-println("✓ Successful: $successes / $(length(results_summary))")
-println("✗ Failed: $failures / $(length(results_summary))")
-
-if failures > 0
-    println("\nFailed problems:")
-    for (name, result) in sort(collect(results_summary), by=x->x[1])
-        if !result["success"]
-            if get(result, "timeout", false)
-                println("  - $name (TIMEOUT)")
-            else
-                loss = result["integration_loss"]
-                println("  - $name (loss: $(round(loss, digits=4)))")
-            end
-        end
-    end
-end
-
-println("="^80)
-println("\nResults written to: $results_file")
-
-# Write final summary
 open(results_file, "a") do f
     write_summary(f, results_summary)
 end

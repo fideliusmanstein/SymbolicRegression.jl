@@ -17,8 +17,54 @@ using SymbolicRegression
 using Interpolations
 using Logging
 using SavitzkyGolay
+using SymbolicUtils
+using Symbolics
 
 export ODERegressionOptions, discover_ode_system, IntegrationLoss, create_feature_matrix
+
+# Internal normalization function for printing equations
+# Uses the same simplification logic as benchmark normalization for consistency
+function normalize_equation_internal(tree, sr_options)
+    # Convert tree to string
+    eq_str = string_tree(tree, sr_options)
+    
+    # Apply symbolic simplification (same as normalize_equation_unified)
+    try
+        # Define symbolic variables
+        Symbolics.@variables x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20
+        
+        # Define square function
+        square(x) = x * x
+        
+        # Parse and evaluate the equation string
+        expr = Meta.parse(eq_str)
+        symbolic_expr = eval(expr)
+        
+        # Simplification pipeline (same as unified normalization)
+        simplified = SymbolicUtils.simplify(symbolic_expr)
+        simplified = Symbolics.expand(simplified)
+        simplified = SymbolicUtils.simplify(simplified)
+        
+        # Convert back to string
+        eq_str = string(simplified)
+    catch e
+        # Continue with original string if simplification fails
+    end
+    
+    # Round constants (same as normalize_equation_unified)
+    pattern = r"(-?\d+\.?\d*(?:[eE][+-]?\d+)?)"
+    eq_str = replace(eq_str, pattern => m -> begin
+        num = parse(Float64, m)
+        rounded = round(num, digits=2)
+        formatted = string(rounded)
+        if occursin('.', formatted)
+            formatted = replace(formatted, r"\.?0+$" => "")
+        end
+        formatted
+    end)
+    
+    return eq_str
+end
 
 """
     ODERegressionOptions
@@ -129,21 +175,21 @@ end
 """
     create_feature_matrix(t::Vector, X::Matrix, inputs::Dict=Dict())
 
-Create feature matrix for symbolic regression: [t, x1, x2, ..., u1, u2, ...]
+Create feature matrix for symbolic regression: [x1, x2, ..., u1, u2, ...]
 
 # Arguments
-- `t`: Time vector
+- `t`: Time vector (not included in features - time is implicit in ODEs)
 - `X`: State matrix (n_time × n_states)
 - `inputs`: Dictionary of input vectors or functions (optional)
 
 # Returns
-- Feature matrix (n_features × n_time) where features are [t; states; inputs]
+- Feature matrix (n_features × n_time) where features are [states; inputs]
 """
 function create_feature_matrix(t::Vector, X::Matrix, inputs::Dict=Dict())
     n_time, n_states = size(X)
     
-    # Start with time and states
-    features = vcat(t', X')  # Shape: (1 + n_states) × n_time
+    # Start with states only (no time - it's implicit in the ODE)
+    features = X'  # Shape: n_states × n_time
     
     # Add inputs if provided
     if !isempty(inputs)
@@ -530,6 +576,10 @@ function refine_with_integration(
     
     if ode_options.verbose
         println("  Initial best loss: ", round(initial_loss, sigdigits=4))
+        println("\n  Initial equations (before refinement):")
+        for (i, tree) in enumerate(initial_trees)
+            println("    X$i' = ", normalize_equation_internal(tree, sr_options))
+        end
     end
     
     # =========================================================================
@@ -623,7 +673,7 @@ function refine_with_integration(
         
         for (i, tree) in enumerate(best_trees)
             println("\nState $i:")
-            println("  dx$i/dt = ", string_tree(tree, sr_options))
+            println("  dx$i/dt = ", normalize_equation_internal(tree, sr_options))
         end
         
         println("\n" * "="^80)
@@ -631,7 +681,7 @@ function refine_with_integration(
         println("="^80)
     end
     
-    return best_trees, best_loss, best_indices
+    return best_trees, best_loss, best_indices, initial_trees, initial_loss
 end
 
 """
@@ -697,7 +747,8 @@ function compute_integration_residuals(
             
             # Create features at each time point
             for i in 1:length(t)
-                feature_vec = [t[i]; X_pred[i, :]]
+                # Features are just states (no time)
+                feature_vec = X_pred[i, :]
                 
                 # Add inputs
                 if !isempty(input_interps)
@@ -745,7 +796,8 @@ function create_ode_function(trees, input_interps)
             return
         end
         
-        features = vcat([t_curr], x)
+        # Features are just states (no time)
+        features = copy(x)
         
         if !isempty(input_interps)
             for key in sort(collect(keys(input_interps)))
@@ -863,7 +915,7 @@ function discover_ode_system(
     derivative_candidates = discover_derivatives(experiments, ode_options)
     
     # Stage 2: Refine with integration-based loss using ALL trajectories
-    best_trees, integration_loss, best_indices = refine_with_integration(
+    best_trees, integration_loss, best_indices, initial_trees, initial_loss = refine_with_integration(
         derivative_candidates, experiments, ode_options
     )
     
@@ -871,7 +923,9 @@ function discover_ode_system(
         derivative_candidates = derivative_candidates,
         best_trees = best_trees,
         integration_loss = integration_loss,
-        best_indices = best_indices
+        best_indices = best_indices,
+        initial_trees = initial_trees,
+        initial_loss = initial_loss
     )
 end
 

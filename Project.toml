@@ -34,13 +34,14 @@ SavitzkyGolay = "c4bf5708-b6a6-4fbe-bcd0-6850ed671584"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
+SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [weakdeps]
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
-SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
 
 [extensions]
 SymbolicRegressionEnzymeExt = "Enzyme"
@@ -83,5 +84,6 @@ SpecialFunctions = "0.10.1, 1, 2"
 StatsBase = "0.33, 0.34"
 StyledStrings = "1"
 SymbolicUtils = "0.19, ^1.0.5, 2, 3"
+Symbolics = "6.58.0"
 TOML = "<0.0.1, 1"
 julia = "1.10"

@@ -14,6 +14,105 @@ using SymbolicRegression
 using Statistics
 using Printf
 using Dates
+using SymbolicUtils
+using Symbolics
+
+"""
+    round_equation_constants(equation_str::String; digits=2)
+
+Round all numeric constants in an equation string to specified number of decimal places.
+"""
+function round_equation_constants(equation_str::String; digits=2)
+    # Match floating point numbers (including scientific notation)
+    pattern = r"(-?\d+\.?\d*(?:[eE][+-]?\d+)?)"
+    
+    result = replace(equation_str, pattern => m -> begin
+        num = parse(Float64, m)  # m is already a string, not a match object
+        # Round to specified digits
+        rounded = round(num, digits=digits)
+        # Format: remove trailing zeros and unnecessary decimal point
+        formatted = string(rounded)
+        # Clean up formatting
+        if occursin('.', formatted)
+            formatted = replace(formatted, r"\.?0+$" => "")
+        end
+        formatted
+    end)
+    
+    return result
+end
+
+"""
+    normalize_equation_unified(eq_input; sr_options=nothing, use_symbolic=true)
+
+Unified normalization for both trees and strings:
+1. Convert input to string (from tree or normalize variable names in string)
+2. Apply symbolic simplification using SymbolicUtils
+3. Round constants to 2 decimal places
+
+This ensures identical normalization behavior for ground truth and discovered equations.
+"""
+function normalize_equation_unified(eq_input; sr_options=nothing, use_symbolic=true)
+    # Step 1: Convert to string
+    if sr_options !== nothing
+        # Input is a tree - convert to string with canonical variable names
+        eq_str = string_tree(eq_input, sr_options)
+    else
+        # Input is a string - normalize variable names (X1→x1, X2→x2, etc.)
+        eq_str = eq_input
+        for i in 1:20
+            eq_str = replace(eq_str, "X$i" => "x$i")
+        end
+    end
+    
+    # Step 2: Symbolic simplification (same for both trees and strings)
+    if use_symbolic
+        try
+            # Define symbolic variables
+            Symbolics.@variables x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20
+            
+            # Define square function for symbolic evaluation
+            square(x) = x * x
+            
+            # Parse and evaluate the equation string
+            expr = Meta.parse(eq_str)
+            symbolic_expr = eval(expr)
+            
+            # Simplification pipeline: simplify → expand → simplify again
+            simplified = SymbolicUtils.simplify(symbolic_expr)
+            simplified = Symbolics.expand(simplified)
+            simplified = SymbolicUtils.simplify(simplified)
+            
+            # Convert back to string
+            eq_str = string(simplified)
+            
+        catch e
+            # If symbolic processing fails, continue with original string
+        end
+    end
+    
+    # Step 3: Round constants (same for both)
+    eq_str = round_equation_constants(eq_str, digits=2)
+    
+    return eq_str
+end
+
+# Convenience wrappers for backward compatibility
+"""
+    normalize_equation(tree, sr_options; use_symbolic=true)
+
+Normalize equation from tree representation.
+"""
+normalize_equation(tree, sr_options; use_symbolic=true) = 
+    normalize_equation_unified(tree; sr_options=sr_options, use_symbolic=use_symbolic)
+
+"""
+    normalize_equation_string(eq_str::String; use_symbolic=true)
+
+Normalize equation from string representation.
+"""
+normalize_equation_string(eq_str::String; use_symbolic=true) = 
+    normalize_equation_unified(eq_str; use_symbolic=use_symbolic)
 
 """
     get_ground_truth_equations(problem_name)
@@ -233,15 +332,19 @@ function benchmark_single_problem(problem_name;
         # Success based on integration loss (no ground truth comparison)
         success = result.integration_loss < 1.0  # Threshold for reasonable discovery
         
-        # Convert discovered trees to equation strings
+        # Convert discovered trees to equation strings with normalization
         sr_options = SymbolicRegression.Options(
             binary_operators=ode_options.binary_operators,
             unary_operators=ode_options.unary_operators
         )
-        discovered_equations = [string_tree(tree, sr_options) for tree in result.best_trees]
+        discovered_equations = [normalize_equation(tree, sr_options) for tree in result.best_trees]
         
-        # Get ground truth equations
-        ground_truth_equations = get_ground_truth_equations(problem_name)
+        # Extract initial equations (before integration refinement)
+        initial_equations = [normalize_equation(tree, sr_options) for tree in result.initial_trees]
+        
+        # Get ground truth equations and normalize them
+        ground_truth_equations_raw = get_ground_truth_equations(problem_name)
+        ground_truth_equations = [normalize_equation_string(eq) for eq in ground_truth_equations_raw]
         
         println("\n" * "-"^80)
         println("Overall Result: ", success ? "✓ SUCCESS" : "✗ FAILED")
@@ -263,8 +366,10 @@ function benchmark_single_problem(problem_name;
             "success" => success,
             "discovery_time" => discovery_time,
             "integration_loss" => result.integration_loss,
+            "initial_loss" => result.initial_loss,
             "n_states" => n_states,
             "discovered_equations" => discovered_equations,
+            "initial_equations" => initial_equations,
             "ground_truth_equations" => ground_truth_equations,
             "error" => nothing
         )
